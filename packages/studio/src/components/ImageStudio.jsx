@@ -1014,7 +1014,7 @@ export default function ImageStudio({
             {history.map((entry, idx) => (
               <div
                 key={entry.id || idx}
-                className="relative group rounded-2xl overflow-hidden border border-white/10 bg-[#0a0a0a] shadow-xl hover:border-primary/50 transition-all duration-300 flex flex-col"
+                className="relative group rounded-lg overflow-hidden border border-white/10 bg-[#0a0a0a] shadow-xl hover:border-primary/50 transition-all duration-300 flex flex-col"
               >
                 <img
                   src={entry.url}
@@ -1206,7 +1206,7 @@ export default function ImageStudio({
                 {dropdownOpen === "ar" && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute bottom-[calc(100%+12px)] left-0 z-50 bg-[#0a0a0a] rounded-md p-3 shadow-2xl border border-white/10 min-w-[160px]"
+                    className="absolute bottom-[calc(100%+12px)] left-0 z-50 bg-[#0a0a0a] rounded-md p-3 max-h-[40vh] overflow-y-auto custom-scrollbar shadow-2xl border border-white/10 min-w-[160px]"
                   >
                     <SimpleDropdown
                       title="Aspect Ratio"
@@ -1228,7 +1228,7 @@ export default function ImageStudio({
                       e.stopPropagation();
                       setDropdownOpen((o) => (o === "quality" ? null : "quality"));
                     }}
-                    className="flex items-center gap-2 px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-xl transition-all border border-white/[0.03] group whitespace-nowrap"
+                    className="flex items-center gap-2 px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-md transition-all border border-white/[0.03] group whitespace-nowrap"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-40 text-white">
                       <path d="M6 2L3 6v15a2 2 0 002 2h14a2 2 0 002-2V6l-3-4H6z" />
@@ -1241,7 +1241,7 @@ export default function ImageStudio({
                   {dropdownOpen === "quality" && (
                     <div
                       onClick={(e) => e.stopPropagation()}
-                      className="absolute bottom-[calc(100%+12px)] left-0 z-50 bg-[#0a0a0a] rounded-[1.5rem] p-3 shadow-2xl border border-white/[0.05] min-w-[160px]"
+                      className="absolute bottom-[calc(100%+12px)] left-0 z-50 bg-[#0a0a0a] rounded-md p-3 max-h-[40vh] overflow-y-auto custom-scrollbar shadow-2xl border border-white/[0.05] min-w-[160px]"
                     >
                       <SimpleDropdown
                         title="Resolution"

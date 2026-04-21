@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { ImageStudio, VideoStudio, LipSyncStudio, CinemaStudio, getUserBalance } from 'studio';
+import { useParams, useRouter } from 'next/navigation';
+import { ImageStudio, VideoStudio, LipSyncStudio, CinemaStudio, WorkflowStudio, getUserBalance } from 'studio';
+import axios from 'axios';
 import ApiKeyModal from './ApiKeyModal';
 
 const TABS = [
@@ -9,16 +11,85 @@ const TABS = [
   { id: 'video',   label: 'Video Studio' },
   { id: 'lipsync', label: 'Lip Sync' },
   { id: 'cinema',  label: 'Cinema Studio' },
+  { id: 'workflows', label: 'Workflows' },
 ];
 
 const STORAGE_KEY = 'muapi_key';
 
 export default function StandaloneShell() {
+  const params = useParams();
+  const router = useRouter();
+  const slug = params?.slug || []; 
+  const idFromParams = params?.id;
+  const tabFromParams = params?.tab;
+
+  // Helper to extract workflow details precisely from either route structure
+  const getWorkflowInfo = useCallback(() => {
+    if (idFromParams) {
+        return { id: idFromParams, tab: tabFromParams || null };
+    }
+    const wfIndex = slug.findIndex(s => s === 'workflows' || s === 'workflow');
+    if (wfIndex === -1) return { id: null, tab: null };
+    return {
+      id: slug[wfIndex + 1] || null,
+      tab: slug[wfIndex + 2] || null
+    };
+  }, [slug, idFromParams, tabFromParams]);
+
+  const { id: urlWorkflowId } = getWorkflowInfo();
+
+  // Initialize activeTab from URL slug/params or default to 'image'
+  const getInitialTab = () => {
+    if (idFromParams || slug.includes('workflow')) return 'workflows';
+    const firstSegment = slug[0];
+    if (firstSegment && TABS.find(t => t.id === firstSegment)) return firstSegment;
+    return 'image';
+  };
+  
   const [apiKey, setApiKey] = useState(null);
-  const [activeTab, setActiveTab] = useState('image');
+  const [activeTab, setActiveTab] = useState(getInitialTab());
+  
   const [balance, setBalance] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [hasMounted, setHasMounted] = useState(false);
+
+  // Sync tab with URL if user navigates manually or via browser back/forward
+  useEffect(() => {
+    const info = getWorkflowInfo();
+    if (info.id) {
+        setActiveTab('workflows');
+    } else {
+        const firstSegment = slug[0];
+        if (firstSegment && TABS.find(t => t.id === firstSegment)) {
+          setActiveTab(firstSegment);
+        }
+    }
+  }, [slug, getWorkflowInfo]);
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    router.push(`/studio/${tabId}`);
+  };
+
+  // Auto-hide header when inside a specific workflow view
+  useEffect(() => {
+    const isEditingWorkflow = (activeTab === 'workflows' || !!idFromParams) && urlWorkflowId;
+    if (isEditingWorkflow) {
+      setIsHeaderVisible(false);
+    } else {
+      setIsHeaderVisible(true);
+    }
+  }, [activeTab, urlWorkflowId, idFromParams]);
+
+  // Global builder CSS cleanup when switching away from Workflows tab
+  useEffect(() => {
+    const fromBuilder = sessionStorage.getItem("fromWorkflowBuilder");
+    if (fromBuilder && activeTab !== 'workflows') {
+      sessionStorage.removeItem("fromWorkflowBuilder");
+      window.location.reload();
+    }
+  }, [activeTab]);
 
   const fetchBalance = useCallback(async (key) => {
     try {
@@ -35,6 +106,8 @@ export default function StandaloneShell() {
     if (stored) {
       setApiKey(stored);
       fetchBalance(stored);
+      // Sync cookie immediately on mount to establish identity for background requests
+      document.cookie = `muapi_key=${stored}; path=/; max-age=31536000; SameSite=Lax`;
     }
   }, [fetchBalance]);
 
@@ -42,13 +115,40 @@ export default function StandaloneShell() {
     localStorage.setItem(STORAGE_KEY, key);
     setApiKey(key);
     fetchBalance(key);
+    document.cookie = `muapi_key=${key}; path=/; max-age=31536000; SameSite=Lax`;
   }, [fetchBalance]);
 
   const handleKeyChange = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     setApiKey(null);
     setBalance(null);
+    document.cookie = "muapi_key=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
   }, []);
+
+  // Inject API key into all outgoing Axios requests (prop-based approach)
+  // We use an interceptor to be selective and NOT send the key to external domains like S3
+  useEffect(() => {
+    // Safety: Clear any global defaults that might have been set previously
+    delete axios.defaults.headers.common['x-api-key'];
+
+    if (!apiKey) return;
+
+    const interceptorId = axios.interceptors.request.use((config) => {
+      // Check if URL is local/proxied
+      const isRelative = config.url.startsWith('/') || !config.url.startsWith('http');
+      const isInternalProxy = config.url.includes('/api/app') || config.url.includes('/api/workflow') || config.url.includes('/api/v1');
+
+      if (isRelative || isInternalProxy) {
+        config.headers['x-api-key'] = apiKey;
+      }
+      
+      return config;
+    });
+
+    return () => {
+      axios.interceptors.request.eject(interceptorId);
+    };
+  }, [apiKey]);
 
   // Poll for balance every 30 seconds if key is present
   useEffect(() => {
@@ -70,61 +170,64 @@ export default function StandaloneShell() {
   return (
     <div className="h-screen bg-[#030303] flex flex-col overflow-hidden text-white">
       {/* Header */}
-      <header className="flex-shrink-0 h-14 border-b border-white/[0.03] flex items-center justify-between px-6 bg-black/20 backdrop-blur-md z-40">
-        {/* Left: Logo */}
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-            </svg>
-          </div>
-          <span className="text-sm font-bold tracking-tight hidden sm:block">OpenGenerativeAI</span>
-        </div>
-
-        {/* Center: Navigation */}
-        <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-6">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`relative py-4 text-[13px] font-medium transition-all whitespace-nowrap px-1 ${
-                activeTab === tab.id
-                  ? 'text-[#d9ff00]'
-                  : 'text-white/50 hover:text-white'
-              }`}
-            >
-              {tab.label}
-              {activeTab === tab.id && (
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#d9ff00] rounded-full" />
-              )}
-            </button>
-          ))}
-        </nav>
-
-        {/* Right: Actions */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3 bg-white/5 px-3 py-1.5 rounded-full border border-white/5 transition-colors">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-white/90">
-                ${balance !== null ? `${balance}` : '---'}
-              </span>
+      {isHeaderVisible && (
+        <header className="flex-shrink-0 h-14 border-b border-white/[0.03] flex items-center justify-between px-6 bg-black/20 backdrop-blur-md z-40">
+          {/* Left: Logo */}
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              </svg>
             </div>
+            <span className="text-sm font-bold tracking-tight hidden sm:block">OpenGenerativeAI</span>
           </div>
 
-          <div 
-            onClick={() => setShowSettings(true)}
-            className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#d9ff00] to-yellow-200 border border-white/20 cursor-pointer hover:scale-105 transition-transform" 
-          />
-        </div>
-      </header>
+          {/* Center: Navigation */}
+          <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-6">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id)}
+                className={`relative py-4 text-[13px] font-medium transition-all whitespace-nowrap px-1 ${
+                  activeTab === tab.id
+                    ? 'text-[#d9ff00]'
+                    : 'text-white/50 hover:text-white'
+                }`}
+              >
+                {tab.label}
+                {activeTab === tab.id && (
+                  <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#d9ff00] rounded-full" />
+                )}
+              </button>
+            ))}
+          </nav>
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 bg-white/5 px-3 py-1.5 rounded-full border border-white/5 transition-colors">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-white/90">
+                  ${balance !== null ? `${balance}` : '---'}
+                </span>
+              </div>
+            </div>
+
+            <div 
+              onClick={() => setShowSettings(true)}
+              className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#d9ff00] to-yellow-200 border border-white/20 cursor-pointer hover:scale-105 transition-transform" 
+            />
+          </div>
+        </header>
+      )}
 
       {/* Studio Content */}
-      <div className="flex-1">
+      <div className="flex-1 min-h-0 relative overflow-hidden">
         {activeTab === 'image'   && <ImageStudio   apiKey={apiKey} />}
         {activeTab === 'video'   && <VideoStudio   apiKey={apiKey} />}
         {activeTab === 'lipsync' && <LipSyncStudio apiKey={apiKey} />}
         {activeTab === 'cinema'  && <CinemaStudio  apiKey={apiKey} />}
+        {activeTab === 'workflows' && <WorkflowStudio apiKey={apiKey} isHeaderVisible={isHeaderVisible} onToggleHeader={setIsHeaderVisible} />}
       </div>
 
       {/* Settings Modal */}
@@ -139,7 +242,7 @@ export default function StandaloneShell() {
             <div className="space-y-4 mb-8">
               <div className="bg-white/5 border border-white/[0.03] rounded-md p-4">
                 <label className="block text-xs font-bold text-white/30 mb-2">
-                  Active API Key
+                   Active API Key
                 </label>
                 <div className="text-[13px] font-mono text-white/80">
                   {apiKey.slice(0, 8)}••••••••••••••••
