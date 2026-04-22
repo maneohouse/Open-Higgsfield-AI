@@ -2001,6 +2001,48 @@
           "step": 0.01
         }
       }
+    },
+    {
+      "id": "minimax-image-01",
+      "name": "MiniMax Image 01",
+      "inputs": {
+        "prompt": {
+          "type": "string",
+          "title": "Prompt",
+          "name": "prompt",
+          "description": "Text prompt describing the image to generate (max 1500 characters).",
+          "examples": [
+            "A serene mountain lake at sunset with golden reflections on the water, surrounded by pine forests and snow-capped peaks, photorealistic, 8k."
+          ]
+        },
+        "aspect_ratio": {
+          "type": "string",
+          "title": "Aspect Ratio",
+          "name": "aspect_ratio",
+          "description": "Aspect ratio of the output image.",
+          "enum": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "3:2",
+            "2:3",
+            "21:9"
+          ],
+          "default": "1:1"
+        },
+        "num_images": {
+          "type": "int",
+          "title": "Number of images",
+          "name": "num_images",
+          "description": "Number of images to generate in a single request.",
+          "default": 1,
+          "minValue": 1,
+          "maxValue": 4,
+          "step": 1
+        }
+      }
     }
   ]
 }
