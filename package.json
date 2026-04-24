@@ -60,6 +60,11 @@
         }
       ]
     },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "include": "build/installer.nsh"
+    },
     "linux": {
       "icon": "public/banner.png",
       "category": "Utility",
